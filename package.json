@@ -1,0 +1,31 @@
+{
+	"name": "amazon-scrapper",
+	"version": "1.0.0",
+	"main": "index.js",
+	"license": "MIT",
+	"dependencies": {
+		"enquirer": "^2.4.1",
+		"nanoid": "^5.0.5",
+		"playwright": "^1.41.2",
+		"random-useragent": "^0.5.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.16",
+		"@types/random-useragent": "^0.3.3",
+		"@typescript-eslint/eslint-plugin": "^6.20.0",
+		"@typescript-eslint/parser": "^6.20.0",
+		"eslint": "^8.56.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-prettier": "^5.1.3",
+		"prettier": "^3.2.5",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.3.3"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "npm run build && node dist/index.js",
+		"scrape": "node dist/index.js",
+		"lint": "eslint ./src",
+		"prettier": "prettier --write ./src"
+	}
+}
