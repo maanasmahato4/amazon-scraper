@@ -12,37 +12,38 @@ type TProduct = {
 
 async function Scraper(search: string): Promise<void> {
 	try {
+		// defining the fake agent and browser
 		const agent = randomUserAgent.getRandom();
 		const browser = await playwright.chromium.launch({
-			headless: false,
-			//channel: 'msedge',
-			slowMo: 200,
+			headless: true,
+			channel: 'msedge',
 		});
 		const context = await browser.newContext({
 			bypassCSP: true,
 			userAgent: agent,
-			viewport: { width: 1368, height: 768 },
+			viewport: { width: 1600, height: 900 },
+			screen: { width: 1600, height: 900 },
 		});
 		const page = await context.newPage();
+
+		// navigating to the amazon.com homepage
 		await page.goto('https://www.amazon.com');
 		await page.waitForLoadState('domcontentloaded');
-		await page.waitForSelector('#twotabsearchtextbox', {state: 'attached'});
+		await page.waitForSelector('input.nav-input', { state: 'attached' });
 
 		// fill the search box
-		const SEARCH_SELECTOR = '#twotabsearchtextbox' || '#nav-search-keywords';
-		await page.fill(SEARCH_SELECTOR, search);
+		await page.fill('input.nav-input', search);
 		await page.keyboard.press('Enter');
 
 		// wait for the page to load
 		await page.waitForSelector('div.s-result-item', { state: 'attached' });
+		await page.waitForSelector('.s-pagination-item.s-pagination-next', {
+			state: 'attached',
+		});
 
-		let isNextEnabled = true;
+		// scraping the data till the last available page
+		let isNextEnabled: boolean = true;
 		const products: Array<TProduct> = [];
-		const NEXT_BUTTON_SELECTOR =
-			'a.s-pagination-item.s-pagination-next.s-pagination-button.s-pagination-separator';
-
-		const NEXT_BUTTON_DISABLED_SELECTOR =
-			'span.s-pagination-item.s-pagination-next.s-pagination-disabled';
 
 		while (isNextEnabled) {
 			const productsCollection = await page.$$eval(
@@ -71,26 +72,62 @@ async function Scraper(search: string): Promise<void> {
 				products.push(product);
 			});
 
-			isNextEnabled = (await page.$(NEXT_BUTTON_DISABLED_SELECTOR)) === null;
-			console.log(isNextEnabled);
-			if (isNextEnabled) {
+			// validating the availability of the next button in pagination then deciding whether to paginate or stop.
+			const NEXT_BUTTON_SELECTOR: string =
+				'a.s-pagination-item.s-pagination-next.s-pagination-button';
+
+			const NEXT_BUTTON_DISABLED_SELECTOR: string =
+				'span.s-pagination-item.s-pagination-next.s-pagination-disabled';
+
+			const nextButtonDisabledElement = await page.$(
+				NEXT_BUTTON_DISABLED_SELECTOR,
+			);
+			const nextButtonElement = await page.$(NEXT_BUTTON_SELECTOR);
+
+			if (!nextButtonDisabledElement && !nextButtonElement) {
+				console.log('error both elements not found!');
+				isNextEnabled = false;
+				await browser.close();
+				break;
+			} else if (nextButtonElement) {
+				console.log('Button is enabled');
 				await page.click(NEXT_BUTTON_SELECTOR);
+				await page.waitForLoadState('domcontentloaded');
 				await page.waitForSelector('div.s-result-item', { state: 'attached' });
+				await page.waitForSelector('.s-pagination-item.s-pagination-next', {
+					state: 'attached',
+				});
+				continue;
+			} else if (nextButtonDisabledElement) {
+				console.log('Button is disabled');
+				isNextEnabled = false;
+			} else {
+				console.error('error occured while looping');
+				break;
 			}
 		}
 
-		// uploading the scraped data into the scraped folder in json format with 'search'.json option as filename.
-		const TARGET_PATH = path.join(process.cwd(), 'scraped', `${search}.json`);
-		const productsJson = JSON.stringify(products, null, 2);
-		if (!fs.existsSync('scraped')) {
-			fs.mkdirSync('scraped');
+		// Ensure the 'scraped' directory exists
+		const scrapedDirectory = path.join(process.cwd(), 'scraped');
+		if (!fs.existsSync(scrapedDirectory)) {
+			fs.mkdirSync(scrapedDirectory);
 		}
 
-		fs.writeFile(TARGET_PATH, productsJson, 'utf-8', (err) => {
-			if (err) console.error(`Error while writing data to ${search}.json`, err);
-			else console.log(`Data saved to ${search}.json successfully`);
-		});
+		// Define the target path for the JSON file
+		const TARGET_PATH = path.join(scrapedDirectory, `${search}.json`);
 
+		try {
+			// Convert the products array to a JSON string with indentation for readability
+			const productsJson = JSON.stringify(products, null, 2);
+
+			// Write the JSON string to the file asynchronously
+			await fs.promises.writeFile(TARGET_PATH, productsJson, 'utf-8');
+			console.log(`Data saved to ${search}.json successfully`);
+		} catch (err) {
+			console.error(`Error while writing data to ${search}.json`, err);
+		}
+
+		// Close the browser
 		await browser.close();
 	} catch (error) {
 		console.error(error);
